@@ -1,0 +1,14 @@
+AppliedPredictiveModeling
+base
+caret
+Formula
+ggplot2
+Hmisc
+lattice
+plyr
+randomForest
+reshape
+scales
+stringr
+survival
+xtable
