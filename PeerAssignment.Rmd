@@ -11,30 +11,31 @@ output:
 ---
 
 ### Synopsis 
-One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+The [HAR Weight Lifting data](http://stat.ethz.ch/R-manual/R-devel/library/datasets/html/mtcars.html) focused on discriminating between different weight lifting exercises to investigate how an activity was performed. Participants performed Unilateral Dumbbell Biceps Curl in five different fashions:
 
-The goal of your project is to predict the manner in which they did the exercise using the "classe" variable in the training set. You may use any of the other variables to predict with. 
-You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. 
+*   Class A:  Exactly according to the specification 
+*   Class B:  Throwing the elbows to the front 
+*   Class C:  Lifting the dumbbell only halfway 
+*   Class D:  Lowering the dumbbell only halfway 
+*   Class E:  Throwing the hips to the front
 
-You will also use your prediction model to predict 20 different test cases. 
-
-### Background
+In this project, 159 variables were used to predict the manner in which they did the exercise using the "classe" variable in the training set. The training dataset was preprocessed and the final model was built using the random forest method and cross-validation to reduce the overfitting. The final model was used to predict 20 different test cases.
 
 ### Data Processing
 
-The following R libraries were required to analysis HAR weight lifting exercise data 
+The following R libraries were required to analysis HAR weight lifting exercise data. 
 ```{r Load libraries}
-library(ggplot2, warn.conflicts = FALSE)
-library(plyr, warn.conflicts = FALSE)
-library(scales, warn.conflicts = FALSE)
-library(stringr, warn.conflicts = FALSE)
-library(reshape, warn.conflicts = FALSE)
-library(caret, warn.conflicts = FALSE)
-library(Hmisc, warn.conflicts = FALSE)
-library(AppliedPredictiveModeling, warn.conflicts = FALSE)
-library(xtable, warn.conflicts = FALSE)
+library(plyr, warn.conflicts = FALSE,quietly=TRUE)
+library(caret, warn.conflicts = FALSE,quietly=TRUE)
+library(Hmisc, warn.conflicts = FALSE,quietly=TRUE)
+library(AppliedPredictiveModeling, warn.conflicts = FALSE,quietly=TRUE)
+library(xtable, warn.conflicts = FALSE,quietly=TRUE)
+library(randomForest, warn.conflicts = FALSE,quietly=TRUE)
 ```
-The weight lifting HAR training data were downloaded and loaded into R using the read.csv function. In order to predict the classe type of weight lifting, this dataset was split into two parts: a training and test set. The seed was set to 975 for this analysis. The training dataset was pre-processed before any analysis was performed. Predictors with a large portion of missing observations and near-zero variances were removed. This reduced the number of predictors from 160 to 58. 
+
+The weight lifting HAR training data were downloaded and loaded into R using the download.file and read.csv functions. In order to predict the classe type of weight lifting, this dataset was split into two parts: preliminary training and test sets. The seed was set to 975 for this analysis. 
+
+The preliminary training dataset was pre-processed before any analysis was performed. Predictors with a large portion of missing observations and near-zero variances were removed. This reduced the number of predictors from 159 to 58. 
 
 ```{r downloading data, cache=TRUE, results='asis'}
 download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "weightTraining.csv")
@@ -47,10 +48,6 @@ inTrain = createDataPartition(WeightTrain$classe, p = 3/4)[[1]]
 training = WeightTrain[ inTrain,]
 testing = WeightTrain[-inTrain,]
  
-# Tidy variables
-#Checking distribution of classe variable in training dataset
-count(training, "classe")
-
 # Remove NAs variables 
 MissingVars <- data.frame(apply(training,2,function(x) sum(is.na(x))))
 colnames(MissingVars) <- c("NACounts")
@@ -63,93 +60,57 @@ nsv_KeyCols <- rownames(nsv)[nsv$nzv==FALSE]
 newTrain <- TrainNoMissing[,colnames(TrainNoMissing) %in% nsv_KeyCols]
 ```
 
-After preprocessing the training dataset, the training model was built using the random forest method and 10-fold cross validation. 
-The random forest method was used to improve the accuracy of the model. However, in random forest models overfitting is an issue. To address this issue, 10-fold cross validation was used to reduce the bias. 
+After preprocessing the preliminary training dataset, the training model was built using the random forest method and 10-fold cross validation. The random forest method was used to improve the accuracy of the model. 
+However, in random forest models overfitting is an issue. A 10-fold cross validation was used to reduce the bias and minmize overfitting. The random forests were tuned to include 250 trees in each cross validation iteration.
 
-#```{r Model, cache=TRUE, results='asis'}
-modelFit1 <-train(newTrain$classe~.,method="rf", trControl=trainControl(method="cv", number=10), data=newTrain[,-c(1:6,59)])
-confusionMatrix(testing$classe,predict(modelFit1,testing))
+```{r Model, cache=TRUE, results='asis'}
+modelFit1 <-train(newTrain$classe~.,method="rf", ntree=250, trControl=trainControl(method="cv", number=10), data=newTrain[,-c(1:6,59)])
+```
 
+In Figure 1, the error rates of the final model are plotted over the final 250 trees. The Error rates converge as the number of tree approach 250. For all 5 classe the error rates are less than 0.05. 
 
-plot(modelFit1$finalModel, uniform=TRUE, main= "Classification Tree")
-text(modelFit1$finalModel, use.n=TRUE, all=TRUE, cex=.8)
-#```
+```{r RandomForest Error Rates, fig.height=5, fig.width=7}
+plot(modelFit1$finalModel, main= "Random Forest Final Model Error Rates")
+```
+
+###### **Figure 1**: Error Rates of Final Random Forest Model.
+
+In the following figure (Figure 2), the importance of the predictor variables in the final model are plotted. The Mean decrease Gini index is used to determine the most important variables.    
+
+```{r VarImportaince, fig.height=7, fig.width=6}
+varImpPlot(modelFit1$finalModel, main="Variable Importance: Final \nRandom Forest Model")
+```
+
+###### **Figure 2**: Variable Importance in the Final Random Forest Model.
+
+The top 10 most important variables are: 
+``` {r Importance Vars, results ='asis'}
+VarImp <- importance(modelFit1$finalModel)
+print(xtable(head(VarImp,10)), type="html")
+```
+
+The final random forest model was used to predict the outcome of the preliminary test weight lifting dataset.
+
+```{r ConfusionMatrix, results= 'asis'}
+ConMatrix <-confusionMatrix(testing$classe,predict(modelFit1,testing))
+print(ConMatrix$overall)
+```
+
+The final model prediction accuracy is 99.16%.  
+
 ### Results
-The test data are available here: 
+Now that the final model is assessed, this model is used on the actual testing dataset of 20 participants. 
+The weight lifting HAR test data set was downloaded and loaded into R using the download.file and read.csv functions.
 
-https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+```{r actual Test, cache=TRUE, results= 'asis'}
+download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", "WeightTest.csv")
+FinalTest <-read.csv("WeightTest.csv")
+TestPred <- data.frame(predict(modelFit1,FinalTest))
+colnames(TestPred) <- "Model_Prediction"
 
-
-#### Across the United States, which types of events are most harmful with respect to population health?  
-Population health was measured in number of fatalities (and injuries) per storm event.
-However, for some storm events there were no civilian casualties. 
-
-```{r, cache=TRUE}
-
+print(xtable(TestPred), type="html")
 ```
-
-Therefore, the figure below examined only storm events that had more than 5 fatalities or more than 25 injuries case reported.
-
-```{r Number of casualties per Storm Event, fig.height=8, fig.width=9}
-
-```
-
-###### **Figure 1**: Total number of civilian casualties (fatalites and injuries) by storm event type.
-
-
-The storm events that caused the highest amount of civilian casualties in the United States are listed below.
-```{r, results='asis'}
-
-```
-
-The top three storm events that effected the population health and caused the most civilan casualties 
-are: tornadoes, floods and excessive heat.
-
-#### Across the United States, which types of events have the greatest economic consequences?
-Economic consequences was measured in the amount of property damage (and crop damage) per storm event.
-However, for some storm events there were no economic consequences. 
-
-```{r, cache=TRUE}
-
-```
-
-Therefore, the figures below only examined storm events that caused property/crop damage.
-
-```{r Amount of Property Damage per Storm Event, fig.height=6, fig.width=9}
-
-```
-
-###### **Figure 2**: Total amount of property damage by storm event type  for property damage greater than  10 Million.
-
-```{r, cache=TRUE}
-
-```
-
-```{r Amount of Crop Damage per Storm Event, fig.height=6, fig.width=9}
-
-```
-
-###### **Figure 3**: Total amount of crop damage by storm event type for crop damage greater than  1 Million.  
-
-The top ten storm events that caused the most property damage in the United States are listed below.
-
-```{r, results='asis'}
-
-#print(xtable(HighPropDamage), type="html")
-```
-
-The top ten storm events that caused the most crop damage in the United States are listed below.
-
-```{r, results='asis'}
-
-```
-
-The top four storm  events that caused economic consequences and created the most econominc (property/crop) damage 
-in the United States are: droughts, floods, hurricane typhoons, and tornadoes.
 
 ### Conclusion 
 
-In conclusion, the exploratory data analysis of the NOAA storm database was able to identified four leading 
-storm event (tornadoes, floods, droughts/excessive heat and hurricane typhoons) that effected the United 
-States population health (civilain casualties) and created economic consequences (property/crop damage).
-
+In conclusion, The weight lifting training dataset was used to create a model that predicted the the way a participant performed the weight lifting exercise. After the final model was built and the perfomance assessed (accuracy 99%) on a preliminary test set, the final model was used to predict 20 participants weight lifting class. 
